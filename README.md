@@ -6,11 +6,17 @@ To build:
 
 To run, assuming you have some mappings called `mappings.sssom.tsv`:
 
-    java -jar target/sssom2neo-1.0-SNAPSHOT.jar --input mappings.sssom.tsv  --output-edges edges.csv --output-nodes nodes.csv
+    java -jar target/sssom2neo-1.0-SNAPSHOT.jar \
+        --input mappings.sssom.tsv \
+        --output-edges edges.csv \
+        --output-nodes nodes.csv
 
 You can also run over a directory containing lots of mappings files, like the [OLS SSSOM dataset](https://www.ebi.ac.uk/ols4/downloads):
 
-    java -jar target/sssom2neo-1.0-SNAPSHOT.jar --input ./mappings/  --output-edges edges.csv --output-nodes nodes.csv
+    java -jar target/sssom2neo-1.0-SNAPSHOT.jar \
+        --input ./mappings/ \
+        --output-edges edges.csv \
+        --output-nodes nodes.csv
 
 Now you have two files, `nodes.csv` and `edges.csv`.
 
