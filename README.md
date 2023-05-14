@@ -53,7 +53,7 @@ outgoing mappings (defined by MONDO) and incoming mappings (defined by other ont
 MATCH (a)<-[mapping]->(b) WHERE a.id="MONDO:0005015" RETURN *
 ```
 
-<h2>Get all mappings for a given subject</h2>
+<h2>Get all mappings for a given subject (transitive)</h2>
 
 We can use an arbitrary level of depth, e.g. to search for mappings up to 3 levels deep:
 
