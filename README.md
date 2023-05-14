@@ -53,6 +53,8 @@ outgoing mappings (defined by MONDO) and incoming mappings (defined by other ont
 MATCH (a)<-[mapping]->(b) WHERE a.id="MONDO:0005015" RETURN *
 ```
 
+<img width="418" alt="Screenshot 2023-05-14 at 23 01 05" src="https://github.com/mapping-commons/sssom2neo/assets/454895/9e713c3a-b9c8-417a-b71e-806cc3290948">
+
 <h2>Get all mappings for a given subject (transitive)</h2>
 
 We can use an arbitrary level of depth, e.g. to search for mappings up to 3 levels deep:
@@ -60,6 +62,8 @@ We can use an arbitrary level of depth, e.g. to search for mappings up to 3 leve
 ```cypher
 MATCH (a)<-[mapping*0..3]->(b) WHERE a.id="MONDO:0005015" RETURN *
 ```
+
+<img width="487" alt="Screenshot 2023-05-14 at 23 01 35" src="https://github.com/mapping-commons/sssom2neo/assets/454895/01a9f898-478f-4b68-a9b2-a2310c1042b9">
 
 This result set includes transitive mappings e.g. `MONDO:0005015`-`hasDbXref`->`UMLS:C0011849`<-`hasDbXref`-`ORDO:101952`-`hasDbXref`->`UMLS:C0011860`.
 
