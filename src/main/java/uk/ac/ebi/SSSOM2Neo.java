@@ -6,11 +6,15 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -63,59 +67,62 @@ public class SSSOM2Neo
         Path outputNodesPath = Path.of( cmd.getOptionValue("output-nodes") );
         Path outputEdgesPath = Path.of( cmd.getOptionValue("output-edges") );
 
-        List<String> nodeHeaders = new ArrayList<>();
-        nodeHeaders.add("id:ID");
-        nodeHeaders.add(":LABEL");
-
-	Set<String> printedNodeIris = new HashSet<>();
-
-
-	Set<String> edgeHeaders = new LinkedHashSet<>();
-	edgeHeaders.add(":START_ID");
-	edgeHeaders.add(":TYPE");
-	edgeHeaders.add(":END_ID");
-
 	if(inputPath.toFile().isDirectory()) {
-
-		for(var file : inputPath.toFile().listFiles()) {
-			if(file.getName().endsWith(".tsv")) {
-				edgeHeaders.addAll(getHeaders(file));
-			}
-		}
-
-		var nodesPrinter = CSVFormat.POSTGRESQL_CSV.withHeader(nodeHeaders.toArray(new String[0])).print(
-				outputNodesPath.toFile(), Charset.defaultCharset());
-
-		var edgesPrinter = CSVFormat.POSTGRESQL_CSV
-				.withHeader(edgeHeaders.toArray(new String[0])).print(
-						outputEdgesPath.toFile(), Charset.defaultCharset());
-
-		for(var file : inputPath.toFile().listFiles()) {
-			if(file.getName().endsWith(".tsv")) {
-				writeMappings(file, nodesPrinter, edgesPrinter, printedNodeIris, edgeHeaders);
-			}
-		}
-
-		nodesPrinter.close(true);
-		edgesPrinter.close(true);
-
-	} else {
-		
-		edgeHeaders.addAll(getHeaders(inputPath.toFile()));
-
-		var nodesPrinter = CSVFormat.POSTGRESQL_CSV.withHeader(nodeHeaders.toArray(new String[0])).print(
-				outputNodesPath.toFile(), Charset.defaultCharset());
-
-		var edgesPrinter = CSVFormat.POSTGRESQL_CSV
-				.withHeader(edgeHeaders.toArray(new String[0])).print(
-						outputEdgesPath.toFile(), Charset.defaultCharset());
-
-		writeMappings(inputPath.toFile(), nodesPrinter, edgesPrinter, printedNodeIris, edgeHeaders);
-
-		nodesPrinter.close(true);
-		edgesPrinter.close(true);
+		printMappings(
+			Arrays.stream(inputPath.toFile().listFiles())
+			.filter(file -> file.getName().endsWith(".tsv"))
+			.collect(Collectors.toList()),
+			outputNodesPath,
+			outputEdgesPath
+		);
+	}  else {
+		printMappings(
+			List.of(inputPath.toFile()),
+			outputNodesPath,
+			outputEdgesPath
+		);
 	}
+    }
 
+    public static void printMappings(Collection<File> inputFiles, Path outputNodesPath, Path outputEdgesPath) throws IOException {
+
+		List<String> nodeHeaders = new ArrayList<>();
+		nodeHeaders.add("id:ID");
+		nodeHeaders.add(":LABEL");
+		nodeHeaders.add("name");
+		nodeHeaders.add("curie_prefix");
+		nodeHeaders.add("curie_local_part");
+
+		Set<String> edgeHeaders = new LinkedHashSet<>();
+		edgeHeaders.add(":START_ID");
+		edgeHeaders.add(":TYPE");
+		edgeHeaders.add(":END_ID");
+
+		for(var file : inputFiles) {
+			edgeHeaders.addAll(getHeaders(file));
+		}
+
+		var nodesPrinter = CSVFormat.POSTGRESQL_CSV.withHeader(nodeHeaders.toArray(new String[0])).print(
+				outputNodesPath.toFile(), Charset.defaultCharset());
+
+		var edgesPrinter = CSVFormat.POSTGRESQL_CSV
+				.withHeader(edgeHeaders.toArray(new String[0])).print(
+						outputEdgesPath.toFile(), Charset.defaultCharset());
+
+		var printedNodeIds = new HashSet<String>(); 
+		var nodeIdsToPrint = new HashSet<String>(); // nodes we need to print but didn't get a label for yet
+
+		for(var f : inputFiles) {
+			writeMappings(f, nodesPrinter, edgesPrinter, printedNodeIds, nodeIdsToPrint, edgeHeaders);
+		}
+
+		// leftover = nodes without labels
+		for(var leftoverNodeId : nodeIdsToPrint) {
+			printNode(leftoverNodeId, leftoverNodeId, nodesPrinter);
+		}
+
+		nodesPrinter.close(true);
+		edgesPrinter.close(true);
     }
 
     public static List<String> getHeaders(File file) throws IOException {
@@ -125,14 +132,11 @@ public class SSSOM2Neo
 	return parser.getHeaderNames();
     }
 
-    public static void writeMappings(File file, CSVPrinter nodesPrinter, CSVPrinter edgesPrinter, Set<String> printedNodeIris, Set<String> edgeHeaders) throws IOException {
+    public static void writeMappings(File inputFile, CSVPrinter nodesPrinter, CSVPrinter edgesPrinter, Set<String> printedNodeIds, Set<String> nodeIdsToPrint, Set<String> edgeHeaders) throws IOException {
 
-	//var reader = new BufferedReader(new FileReader(file));
-
-	CSVParser parser = new CSVParser(new FileReader(file), CSVFormat.TDF.withCommentMarker('#').withHeader());
+	CSVParser parser = new CSVParser(new FileReader(inputFile), CSVFormat.TDF.withCommentMarker('#').withHeader());
 
 	Map<String,Integer> headerMap = parser.getHeaderMap();
-	// Map<String,Object> header = yaml.load(parser.getHeaderComment());
 
 	for(CSVRecord record : parser) {
 		Map<String,String> recordMap = record.toMap();
@@ -142,14 +146,8 @@ public class SSSOM2Neo
 		String objId = recordMap.get("object_id");
 		String objLabel = recordMap.get("object_label");
 
-		if(!printedNodeIris.contains(subjId)) {
-			printedNodeIris.add(subjId);
-			nodesPrinter.printRecord(List.of(subjId, subjLabel));
-		}
-		if(!printedNodeIris.contains(objId)) {
-			printedNodeIris.add(objId);
-			nodesPrinter.printRecord(List.of(objId, objLabel));
-		}
+		addNode(subjId, subjLabel, inputFile, nodesPrinter, edgesPrinter, printedNodeIds, nodeIdsToPrint, edgeHeaders);
+		addNode(objId, objLabel, inputFile, nodesPrinter, edgesPrinter, printedNodeIds, nodeIdsToPrint, edgeHeaders);
 
 		String[] row = new String[edgeHeaders.size()];
 
@@ -193,4 +191,30 @@ public class SSSOM2Neo
 
 
     }
+
+    public static void addNode(String nodeId, String nodeLabel, File inputFile, CSVPrinter nodesPrinter, CSVPrinter edgesPrinter, Set<String> printedNodeIds, Set<String> nodeIdsToPrint, Set<String> edgeHeaders) throws IOException {
+
+	if(printedNodeIds.contains(nodeId) || nodeIdsToPrint.contains(nodeId)) {
+		return;
+	}
+
+	if(nodeLabel == null || nodeLabel.length() == 0) {
+		nodeIdsToPrint.add(nodeId);
+		return;
+	}
+
+	nodeIdsToPrint.remove(nodeId);
+	printedNodeIds.add(nodeId);
+
+	printNode(nodeId, nodeLabel, nodesPrinter);
+    }
+
+    public static void printNode(String nodeId, String nodeLabel, CSVPrinter nodesPrinter) throws IOException {
+
+	String curiePrefix = nodeId.substring(0, nodeId.indexOf(":"));
+	String curieLocalPart = nodeId.substring(nodeId.indexOf(":")+1);
+
+	nodesPrinter.printRecord(List.of(nodeId, "MappedEntity", nodeLabel, curiePrefix, curieLocalPart));
+    }
+
 }
