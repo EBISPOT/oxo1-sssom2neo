@@ -1,0 +1,5 @@
+/.idea
+/target
+out.txt
+dependency-reduced-pom.xml
+run.sh
