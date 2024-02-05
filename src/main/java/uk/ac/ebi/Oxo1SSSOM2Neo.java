@@ -35,11 +35,11 @@ public class Oxo1SSSOM2Neo {
 
 		Option olsUrl = new Option (null, "ols-url", true, "URL of OLS instance to use");
 		olsUrl.setRequired(true);
-		options.addOption(input);
+		options.addOption(olsUrl);
 
-		Option outputDatasources = new Option (null, "output-datasources", true, "output path for datasources tsv file");
-		outputDatasources.setRequired(true);
-		options.addOption(outputDatasources);
+		Option outputDatasourcesOption = new Option (null, "output-datasources", true, "output path for datasources tsv file");
+		outputDatasourcesOption.setRequired(true);
+		options.addOption(outputDatasourcesOption);
 
         Option outputNodes = new Option(null, "output-nodes", true, "output path for terms tsv file");
         outputNodes.setRequired(true);
@@ -66,31 +66,40 @@ public class Oxo1SSSOM2Neo {
         Path inputPath = Path.of( cmd.getOptionValue("input") );
 
 		String olsUlr = cmd.getOptionValue("ols-url");
-		Path  outputDataSources = Path.of(cmd.getOptionValue("output-datasources"));
+		Path outputDatasources = Path.of(cmd.getOptionValue("output-datasources"));
         Path outputNodesPath = Path.of(cmd.getOptionValue("output-nodes"));
         Path outputEdgesPath = Path.of(cmd.getOptionValue("output-edges"));
 
 		// Todo - Get ontologies from OLS
+		Map<String, Datasources.Datasource> optionalOLSDatasources =
+				Datasources.getAndGenerateOLSDatasourcesCSV(olsUlr, outputDatasources);
 
 		if(inputPath.toFile().isDirectory()) {
-			printMappings(
+			generateNeo4JNodesAndEdgesCSV(
 				Arrays.stream(inputPath.toFile().listFiles())
 				.filter(file -> file.getName().endsWith(".tsv"))
 				.collect(Collectors.toList()),
 				outputNodesPath,
-				outputEdgesPath
+				outputEdgesPath,
+				optionalOLSDatasources
 			);
 		}  else {
-			printMappings(
+			generateNeo4JNodesAndEdgesCSV(
 				List.of(inputPath.toFile()),
 				outputNodesPath,
-				outputEdgesPath
+				outputEdgesPath,
+				optionalOLSDatasources
 			);
 		}
     }
 
-    public static void printMappings(Collection<File> inputFiles, Path outputNodesPath, Path outputEdgesPath) throws IOException {
-		System.out.println("printMappings for inputFiles");
+    public static void generateNeo4JNodesAndEdgesCSV(Collection<File> sssomInputFiles,
+													 Path outputNodesPath,
+													 Path outputEdgesPath,
+													 Map<String, Datasources.Datasource> optionalOLSDatasources)
+			throws IOException {
+
+		System.out.println("printMappings for sssomInputFiles");
 
 		Map<String, String> prefixToUriMap = new HashMap<>();
 
@@ -104,8 +113,8 @@ public class Oxo1SSSOM2Neo {
 		var printedNodeIds = new HashSet<String>(); 
 		var nodeIdsToPrint = new HashSet<String>(); // nodes we need to print but didn't get a label for yet
 
-		for(var file : inputFiles) {
-			writeMappings(file, nodesPrinter, edgesPrinter, printedNodeIds, nodeIdsToPrint, prefixToUriMap);
+		for(var sssomFile : sssomInputFiles) {
+			writeMappings(sssomFile, nodesPrinter, edgesPrinter, printedNodeIds, nodeIdsToPrint, prefixToUriMap);
 		}
 
 		// leftover = nodes without labels
@@ -213,7 +222,7 @@ public class Oxo1SSSOM2Neo {
 				}
 			}
 
-			edgesPrinter.printRecord(row);
+			edgesPrinter.printRecord((Object[])row);
 		}
 
     }
@@ -256,7 +265,7 @@ public class Oxo1SSSOM2Neo {
 		return "";
 	}
 
-	static enum TermHeader {
+	enum TermHeader {
 		IDENTIFIER("identifier"),
 		CURIE("curie"),
 		LABEL("label"),
@@ -276,7 +285,7 @@ public class Oxo1SSSOM2Neo {
 		}
 	}
 
-	static enum MappingHeader {
+	enum MappingHeader {
 		FROM_CURIE("fromCurie"),
 		TO_CURIE("toCurie"),
 		DATASOURCE_PREFIX("datasourcePrefix"),
@@ -295,6 +304,10 @@ public class Oxo1SSSOM2Neo {
 			Arrays.asList(MappingHeader.values())
 					.forEach(term -> setOfString.add(term.value));
 			return setOfString;
+		}
+
+		public String getValue() {
+			return value;
 		}
 	}
 }
