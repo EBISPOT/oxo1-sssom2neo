@@ -19,11 +19,9 @@ public class Datasources {
     public static Map<String,Datasource>  getAndGenerateOLSDatasourcesCSV(String olsUrl, Path outputPath)
             throws IOException {
 
-        Optional<Map<String,Datasource>> optionalOLSDatasources = getOntologiesFromOLS(olsUrl);
-        if (optionalOLSDatasources.isEmpty())
+        Map<String,Datasource> olsDatasources = getOntologiesFromOLS(olsUrl);
+        if (olsDatasources.isEmpty())
             return new HashMap<>();
-
-        Map<String, Datasource> olsDatasources = optionalOLSDatasources.get();
 
         var datasourcesPrinter = CSVFormat.POSTGRESQL_CSV.withHeader(
                 DatasourcesHeader.asSetOfString().toArray(new String[0])).print(
@@ -35,12 +33,13 @@ public class Datasources {
         }
         datasourcesPrinter.close(true);
 
-        return optionalOLSDatasources.get();
+        return olsDatasources;
     }
-    private static Optional<Map<String,Datasource>> getOntologiesFromOLS(String olsUrl) throws IOException {
+    private static Map<String,Datasource> getOntologiesFromOLS(String olsUrl) throws IOException {
 
         final String olsOntologiesRequestUri = olsUrl + "api/ontologies?size=1000";
 
+        Map<String,Datasource> datasourceMap = new HashMap<>();
 
         try (CloseableHttpClient httpClient = HttpClients.createDefault()){
             HttpGet httpGet = new HttpGet(olsOntologiesRequestUri);
@@ -51,20 +50,19 @@ public class Datasources {
                     if (entity == null) {
                         return Optional.empty();
                     } else {
-                        mapToDatasources(EntityUtils.toString(entity));
-                        return Optional.empty();
+                        datasourceMap.putAll(mapToDatasources(EntityUtils.toString(entity)));
+                        return datasourceMap;
                     }
                 } else {
-                    return Optional.empty();
+                    return datasourceMap;
                 }
             });
+            return datasourceMap;
         }
-
-        return Optional.empty();
     }
 
 
-    private static Optional<Map<String,Datasource>> mapToDatasources(String strResponse) {
+    private static Map<String,Datasource> mapToDatasources(String strResponse) {
         Map<String, Datasource> datasources = new HashMap();
         Gson gson = new Gson();
         Map response = gson.fromJson(strResponse, Map.class);
@@ -75,13 +73,13 @@ public class Datasources {
                 ontologies.forEach(o -> {
                     Optional<Datasource> optionalDatasource = getDatasourceFromMap(o);
                     if (optionalDatasource.isPresent())
-                        datasources.put(optionalDatasource.get().prefix, optionalDatasource.get());
+                        datasources.put(optionalDatasource.get().getPrefix(), optionalDatasource.get());
                 });
-                return Optional.of(datasources);
+                return datasources;
             }
         }
 
-        return Optional.empty();
+        return datasources;
     }
 
     private static Optional<Datasource> getDatasourceFromMap(Map<String, Object> ontologyMap) {
@@ -104,16 +102,11 @@ public class Datasources {
             ArrayList<String> baseUris = (ArrayList<String>) ontologyConfig.getOrDefault("baseUris", null);
             String baseUri = (baseUris == null || baseUris.isEmpty()) ? "" : baseUris.get(0);
 
-            String[] alternativePrefixes;
+            List<String> alternativePrefixesList = new LinkedList<>();
+            alternativePrefixesList.add((String)ontologyConfig.get("id"));
 
-            if (ontologyConfig.get("preferredPrefix") != null) {
-                alternativePrefixes = new String[2];
-                alternativePrefixes[0] = (String)ontologyConfig.get("id");
-                alternativePrefixes[1] = (String)ontologyConfig.get("preferredPrefix");
-            } else {
-                alternativePrefixes = new String[1];
-                alternativePrefixes[0] = (String)ontologyConfig.get("id");
-            }
+            if (ontologyConfig.get("preferredPrefix") != null)
+                alternativePrefixesList.add((String)ontologyConfig.get("preferredPrefix"));
 
             Datasource datasource = new Datasource(
                     prefix,
@@ -122,11 +115,10 @@ public class Datasources {
                     description,
                     "ONTOLOGY",
                     baseUri,
-                    alternativePrefixes,
+                    alternativePrefixesList,
                     "",
                     version
             );
-            System.out.println("Datasource = " + datasource);
             return Optional.of(datasource);
         }
 
@@ -140,13 +132,13 @@ public class Datasources {
         String description;
         String sourceType;
         String baseUri;
-        String[] alternativePrefixes;
+        List <String> alternativePrefixes;
         String license;
         String versionInfo;
 
         public Datasource(String prefix, String idorgNamespace, String title, String description, String sourceType,
-                          String baseUri, String[] alternativePrefixes, String license, String versionInfo) {
-            this.prefix = prefix;
+                          String baseUri, List alternativePrefixes, String license, String versionInfo) {
+            this.prefix = prefix.toUpperCase();
             this.idorgNamespace = idorgNamespace;
             this.title = title;
             this.description = description;
@@ -157,6 +149,17 @@ public class Datasources {
             this.versionInfo = versionInfo;
         }
 
+        public Datasource(String prefix, String sourceType) {
+            this.prefix = prefix;
+            this.idorgNamespace = "";
+            this.title = "";
+            this.description = "";
+            this.sourceType = sourceType;
+            this.baseUri = "";
+            this.alternativePrefixes = new ArrayList();
+            this.license = "";
+            this.versionInfo = "";
+        }
         public String getPrefix() {
             return prefix;
         }
@@ -181,8 +184,18 @@ public class Datasources {
             return baseUri;
         }
 
-        public String[] getAlternativePrefixes() {
+        public List getAlternativePrefixes() {
             return alternativePrefixes;
+        }
+
+        public String getAlternativePrefixesAsString() {
+            StringBuilder sbAlternativePrefixes = new StringBuilder(alternativePrefixes.get(0));
+            for (int i = 1; i < alternativePrefixes.size(); i++) {
+                sbAlternativePrefixes.append(",");
+                sbAlternativePrefixes.append(alternativePrefixes.get(i));
+            }
+
+            return sbAlternativePrefixes.toString();
         }
 
         public String getLicense() {
@@ -202,7 +215,7 @@ public class Datasources {
                     ", description='" + description + '\'' +
                     ", sourceType='" + sourceType + '\'' +
                     ", baseUri='" + baseUri + '\'' +
-                    ", alternativePrefixes=" + Arrays.toString(alternativePrefixes) +
+                    ", alternativePrefixes=" + alternativePrefixes.toString() +
                     ", license='" + license + '\'' +
                     ", versionInfo='" + versionInfo + '\'' +
                     '}';
@@ -219,7 +232,7 @@ public class Datasources {
                     this.getDescription(),
                     this.getSourceType(),
                     this.getBaseUri(),
-                    this.getAlternativePrefixes().toString(),
+                    this.getAlternativePrefixesAsString(),
                     this.getLicense(),
                     this.getVersionInfo());
         }
@@ -232,7 +245,7 @@ public class Datasources {
         DESCRIPTION("description"),
         SOURCE_TYPE("sourceType"),
         BASE_URI("baseUri"),
-        ALTERNATIVE_PREFIXES("alternativePrefixes"),
+        ALTERNATE_PREFIXES("alternatePrefixes"),
         LICENSE("license"),
         VERSION_INFO("versionInfo");
 

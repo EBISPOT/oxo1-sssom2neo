@@ -11,6 +11,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import com.google.gson.Gson;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
@@ -71,7 +72,7 @@ public class Oxo1SSSOM2Neo {
         Path outputEdgesPath = Path.of(cmd.getOptionValue("output-edges"));
 
 		// Todo - Get ontologies from OLS
-		Map<String, Datasources.Datasource> optionalOLSDatasources =
+		Map<String, Datasources.Datasource> olsDatasources =
 				Datasources.getAndGenerateOLSDatasourcesCSV(olsUlr, outputDatasources);
 
 		if(inputPath.toFile().isDirectory()) {
@@ -81,14 +82,14 @@ public class Oxo1SSSOM2Neo {
 				.collect(Collectors.toList()),
 				outputNodesPath,
 				outputEdgesPath,
-				optionalOLSDatasources
+				olsDatasources
 			);
 		}  else {
 			generateNeo4JNodesAndEdgesCSV(
 				List.of(inputPath.toFile()),
 				outputNodesPath,
 				outputEdgesPath,
-				optionalOLSDatasources
+				olsDatasources
 			);
 		}
     }
@@ -96,7 +97,7 @@ public class Oxo1SSSOM2Neo {
     public static void generateNeo4JNodesAndEdgesCSV(Collection<File> sssomInputFiles,
 													 Path outputNodesPath,
 													 Path outputEdgesPath,
-													 Map<String, Datasources.Datasource> optionalOLSDatasources)
+													 Map<String, Datasources.Datasource> datasources)
 			throws IOException {
 
 		System.out.println("printMappings for sssomInputFiles");
@@ -114,7 +115,7 @@ public class Oxo1SSSOM2Neo {
 		var nodeIdsToPrint = new HashSet<String>(); // nodes we need to print but didn't get a label for yet
 
 		for(var sssomFile : sssomInputFiles) {
-			writeMappings(sssomFile, nodesPrinter, edgesPrinter, printedNodeIds, nodeIdsToPrint, prefixToUriMap);
+			writeMappings(sssomFile, nodesPrinter, edgesPrinter, printedNodeIds, nodeIdsToPrint, prefixToUriMap, datasources);
 		}
 
 		// leftover = nodes without labels
@@ -166,13 +167,16 @@ public class Oxo1SSSOM2Neo {
 	}
 
 	public static void writeMappings(File sssomFile, CSVPrinter nodesPrinter, CSVPrinter edgesPrinter, Set<String> printedNodeIds,
-									 Set<String> nodeIdsToPrint, Map<String, String> prefixToUriMap) throws IOException {
+									 Set<String> nodeIdsToPrint, Map<String, String> prefixToUriMap,
+									 Map<String, Datasources.Datasource> datasources) throws IOException {
 
 		Map<String, Object> yamlHeader = getYamlHeader(sssomFile);
 		prefixToUriMap.putAll((Map<String, String>)yamlHeader.get("curie_map"));
 
 
 		CSVParser sssomParser = new CSVParser(new FileReader(sssomFile), CSVFormat.TDF.builder().setCommentMarker('#').setHeader().build());
+
+		Gson gson = new Gson();
 
 		for(CSVRecord sssomRecord : sssomParser) {
 			Map<String,String> recordMap = sssomRecord.toMap();
@@ -200,12 +204,23 @@ public class Oxo1SSSOM2Neo {
 				}
 				if (header.equals(MappingHeader.DATASOURCE_PREFIX)) {
 					String localName = (String)yamlHeader.get("local_name");
-					row[col++] = localName.substring(0, localName.indexOf('.'));
+					row[col++] = localName.substring(0, localName.indexOf('.')).toUpperCase();
 					continue;
 				}
 				if (header.equals(MappingHeader.DATASOURCE)) {
 					String localName = (String)yamlHeader.get("local_name");
-					row[col++] = localName.substring(0, localName.indexOf('.'));
+					String datasourcePrefix = localName.substring(0, localName.indexOf('.'));
+					System.out.println("Datasource to retrieve for prefix = " + datasourcePrefix);
+					Datasources.Datasource datasource = datasources.get(datasourcePrefix.toUpperCase());
+					if (datasource != null ) {
+						String json = gson.toJson(datasource);
+						row[col++] = json;
+//						row[col++] = datasource.toNeo4jString();
+					} else {
+						Datasources.Datasource datasource1 = new Datasources.Datasource(datasourcePrefix, "DATABASE");
+						String json = gson.toJson(datasource1);
+						row[col++] = json;
+					}
 					continue;
 				}
 				if (header.equals(MappingHeader.SOURCE_TYPE)) {
