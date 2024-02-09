@@ -86,7 +86,6 @@ public class Datasources {
         if (ontologyMap.containsKey("config")) {
             Map<String, Object> ontologyConfig = (Map<String, Object>) ontologyMap.get("config");
 
-            System.out.println("Prefix = " + ontologyConfig.get("preferredPrefix") + " id = " + ontologyConfig.get("id") );
             String prefix = (ontologyConfig.get("preferredPrefix") == null) ?
                     (String)ontologyConfig.get("id") : (String)ontologyConfig.get("preferredPrefix");
 

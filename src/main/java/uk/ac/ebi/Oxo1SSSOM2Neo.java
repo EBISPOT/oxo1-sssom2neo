@@ -71,6 +71,12 @@ public class Oxo1SSSOM2Neo {
         Path outputNodesPath = Path.of(cmd.getOptionValue("output-nodes"));
         Path outputEdgesPath = Path.of(cmd.getOptionValue("output-edges"));
 
+		System.out.println("inputPath = " + inputPath);
+		System.out.println("olsUlr = " + olsUlr);
+		System.out.println("outputDatasources = " + outputDatasources);
+		System.out.println("outputNodesPath = " + outputNodesPath);
+		System.out.println("outputEdgesPath = " + outputEdgesPath);
+
 		// Todo - Get ontologies from OLS
 		Map<String, Datasources.Datasource> olsDatasources =
 				Datasources.getAndGenerateOLSDatasourcesCSV(olsUlr, outputDatasources);
@@ -210,12 +216,10 @@ public class Oxo1SSSOM2Neo {
 				if (header.equals(MappingHeader.DATASOURCE)) {
 					String localName = (String)yamlHeader.get("local_name");
 					String datasourcePrefix = localName.substring(0, localName.indexOf('.'));
-					System.out.println("Datasource to retrieve for prefix = " + datasourcePrefix);
 					Datasources.Datasource datasource = datasources.get(datasourcePrefix.toUpperCase());
 					if (datasource != null ) {
 						String json = gson.toJson(datasource);
 						row[col++] = json;
-//						row[col++] = datasource.toNeo4jString();
 					} else {
 						Datasources.Datasource datasource1 = new Datasources.Datasource(datasourcePrefix, "DATABASE");
 						String json = gson.toJson(datasource1);

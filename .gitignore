@@ -2,4 +2,4 @@
 /target
 out.txt
 dependency-reduced-pom.xml
-run.sh
+ols2csv.sh

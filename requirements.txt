@@ -1,0 +1,2 @@
+configparser==3.5.0
+neo4j-driver==1.7.6
